@@ -27,7 +27,6 @@ export default function App() {
   const [leads, setLeads] = useState([]);
   const [selectedLead, setSelectedLead] = useState(null);
   const [lastReceivedTime, setLastReceivedTime] = useState(null);
-  const [isSimulating, setIsSimulating] = useState(false);
 
   const socketRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -111,33 +110,8 @@ export default function App() {
     setIsEditingUrl(false);
   };
 
-  // Trigger test submission locally from app
-  const triggerLocalSimulation = async () => {
-    setIsSimulating(true);
-    try {
-      const targetEndpoint = `${serverUrl}/webhook`;
-      const response = await fetch(targetEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          test_event: true,
-          leadgen_id: `test_${Math.floor(100000 + Math.random() * 900000)}`
-        })
-      });
-      if (response.ok) {
-        console.log('Simulated test lead sent successfully!');
-      } else {
-        Alert.alert('Simulation Failed', `Server responded with status ${response.status}`);
-      }
-    } catch (err) {
-      Alert.alert('Connection Error', `Could not reach ${serverUrl}. Make sure backend is running.`);
-    } finally {
-      setIsSimulating(false);
-    }
-  };
-
   const getInitials = (name) => {
-    if (!name) return 'ML';
+    if (!name || name === 'N/A') return 'ML';
     const parts = name.trim().split(' ');
     if (parts.length >= 2) {
       return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
@@ -183,7 +157,7 @@ export default function App() {
 
       <View style={styles.cardFooter}>
         <View style={styles.sourceBadge}>
-          <Text style={styles.sourceBadgeText}>Meta Lead Ad</Text>
+          <Text style={styles.sourceBadgeText}>Meta Lead Ad Live</Text>
         </View>
         <Text style={styles.formIdText}>Form #{item.formId || 'Default'}</Text>
       </View>
@@ -242,30 +216,15 @@ export default function App() {
           <Text style={styles.metricNumber}>{leads.length}</Text>
           <Text style={styles.metricLabel}>Total Leads</Text>
         </Animated.View>
-
-        <TouchableOpacity
-          style={[styles.testBtn, isSimulating && styles.testBtnDisabled]}
-          onPress={triggerLocalSimulation}
-          disabled={isSimulating}
-        >
-          {isSimulating ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <>
-              <Text style={styles.testBtnIcon}>⚡</Text>
-              <Text style={styles.testBtnText}></Text>
-            </>
-          )}
-        </TouchableOpacity>
       </View>
 
       {/* Leads Feed List */}
       {leads.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>📥</Text>
-          <Text style={styles.emptyTitle}>Waiting for Incoming Leads</Text>
+          <Text style={styles.emptyTitle}>Waiting for Incoming Live Leads</Text>
           <Text style={styles.emptyDescription}>
-            Submit a lead via Meta's Lead Testing Tool or tap "Test Push" above to simulate a submission.
+            Submit a lead via Meta's Lead Testing Tool or your live Meta Lead Ad campaign.
           </Text>
         </View>
       ) : (

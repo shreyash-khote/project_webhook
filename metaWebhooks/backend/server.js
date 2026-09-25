@@ -106,8 +106,12 @@ app.post('/webhook', async (req, res) => {
 
             console.log(`[PROCESSING_LEAD] Lead ID: ${leadgenId} | Page: ${pageId} | Form: ${formId}`);
 
-            
             const leadDetails = await fetchLeadFromMetaGraph(leadgenId);
+
+            if (!leadDetails) {
+              console.warn(`[LEAD_SKIPPED] Could not retrieve real lead details for Lead ID: ${leadgenId}`);
+              continue;
+            }
 
             const formattedLead = {
               id: leadgenId || `lead_${Date.now()}`,
@@ -120,66 +124,41 @@ app.post('/webhook', async (req, res) => {
               email: leadDetails.email,
               phoneNumber: leadDetails.phoneNumber,
               customFields: leadDetails.customFields,
-              isMock: leadDetails.isMock,
-              source: leadDetails.isMock ? 'Meta Lead Tool (Simulated)' : 'Meta Lead Ads Live'
+              source: 'Meta Lead Ads Live'
             };
 
-            
             receivedLeads.unshift(formattedLead);
             if (receivedLeads.length > 50) receivedLeads.pop();
 
-            
             io.emit('new_lead', formattedLead);
-            console.log(`[SOCKET_BROADCAST] Pushed lead "${formattedLead.fullName}" to ${io.engine.clientsCount} connected app(s).`);
+            console.log(`[SOCKET_BROADCAST] Pushed live lead "${formattedLead.fullName}" to ${io.engine.clientsCount} connected app(s).`);
           }
         }
       }
-    } else if (body.test_event) {
-      
-      const simData = createSimulatedLead(body.leadgen_id || `test_${Date.now()}`);
-      const formattedLead = {
-        id: body.leadgen_id || `test_${Date.now()}`,
-        pageId: body.page_id || 'test_page',
-        formId: body.form_id || 'test_form',
-        createdTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        receivedAt: new Date().toLocaleTimeString(),
-        timestamp: Date.now(),
-        fullName: simData.fullName,
-        email: simData.email,
-        phoneNumber: simData.phoneNumber,
-        customFields: simData.customFields,
-        isMock: true,
-        source: 'Meta Lead Tool (Simulated)'
-      };
-      receivedLeads.unshift(formattedLead);
-      if (receivedLeads.length > 50) receivedLeads.pop();
-      io.emit('new_lead', formattedLead);
-      console.log(`[TEST_BROADCAST] Pushed test lead "${formattedLead.fullName}" to ${io.engine.clientsCount} app(s).`);
     }
   } catch (err) {
     console.error('[PROCESSING_ERROR] Error handling webhook payload:', err.message);
   }
 });
 
-
 async function fetchLeadFromMetaGraph(leadgenId) {
   const pageAccessToken = process.env.PAGE_ACCESS_TOKEN;
 
   if (!pageAccessToken) {
-    console.log('[GRAPH_API] PAGE_ACCESS_TOKEN is missing in .env. Using realistic mock lead fields.');
-    return createSimulatedLead(leadgenId);
+    console.error('[GRAPH_API_ERROR] PAGE_ACCESS_TOKEN is missing in .env. Cannot fetch real lead data from Meta.');
+    return null;
   }
 
   try {
     const url = `https://graph.facebook.com/v24.0/${leadgenId}?access_token=${pageAccessToken}`;
-    console.log(`[GRAPH_API] Fetching lead details from: https://graph.facebook.com/v24.0/${leadgenId}`);
+    console.log(`[GRAPH_API] Fetching real lead details from: https://graph.facebook.com/v24.0/${leadgenId}`);
     
     const response = await axios.get(url);
     const data = response.data;
 
-    let fullName = 'Meta Test Lead';
-    let email = 'lead@example.com';
-    let phoneNumber = '+1 555-0199';
+    let fullName = 'N/A';
+    let email = 'N/A';
+    let phoneNumber = 'N/A';
     const customFields = [];
 
     if (data && data.field_data && Array.isArray(data.field_data)) {
@@ -201,40 +180,18 @@ async function fetchLeadFromMetaGraph(leadgenId) {
       });
     }
 
-    console.log('[GRAPH_API_SUCCESS] Fetched lead:', { fullName, email, phoneNumber });
+    console.log('[GRAPH_API_SUCCESS] Fetched real lead data:', { fullName, email, phoneNumber });
     return {
-      fullName: fullName || 'Meta Lead User',
-      email: email || 'lead.user@example.com',
-      phoneNumber: phoneNumber || '+1 (555) 234-5678',
-      customFields,
-      isMock: false
+      fullName,
+      email,
+      phoneNumber,
+      customFields
     };
 
   } catch (error) {
-    console.warn(` [GRAPH_API_FALLBACK] Could not fetch Graph API lead details (${error.response ? error.response.status : error.message}). Using realistic fallback data.`);
-    return createSimulatedLead(leadgenId);
+    console.error(`[GRAPH_API_ERROR] Failed to fetch Graph API lead details (${error.response ? error.response.status : error.message}).`);
+    return null;
   }
-}
-
-
-function createSimulatedLead(leadgenId) {
-  const mockNames = ['Sarah Jenkins', 'Marcus Vance', 'Elena Rostova', 'David Chen', 'Priya Sharma'];
-  const mockDomains = ['gmail.com', 'techcorp.io', 'outlook.com', 'startup.co'];
-  
-  const randomName = mockNames[Math.floor(Math.random() * mockNames.length)] || 'Sarah Jenkins';
-  const cleanName = String(randomName).toLowerCase().replace(/\s+/g, '.');
-  const randomDomain = mockDomains[Math.floor(Math.random() * mockDomains.length)] || 'gmail.com';
-
-  return {
-    fullName: randomName,
-    email: `${cleanName}@${randomDomain}`,
-    phoneNumber: `+1 (${Math.floor(Math.random()*800)+200}) ${Math.floor(Math.random()*800)+100}-${Math.floor(Math.random()*8999)+1000}`,
-    customFields: [
-      { label: 'Form Name', value: 'Meta Lead Ad Campaign' },
-      { label: 'Lead ID', value: String(leadgenId || '4958291048') }
-    ],
-    isMock: true
-  };
 }
 
 // Start Server
